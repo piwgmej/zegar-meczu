@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Zegar Meczu</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zegar Meczu">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #000;
+    --text: #fff;
+    --muted: #8e8e93;
+    --dim: rgba(255, 255, 255, .55);
+    --green: #30d158;
+    --yellow: #ffd60a;
+    --orange: #ff9f0a;
+    --red: #ff453a;
+    --blue: #0a84ff;
+    --cyan: #64d2ff;
+    --gray: #48484a;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --sep: #38383a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-rounded, -apple-system, system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+    overflow: hidden;
+  }
+  button { font: inherit; color: inherit; touch-action: manipulation; }
+
+  .app {
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas: "top" "face" "controls";
+    gap: 12px;
+    padding: calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 16px)
+             calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px);
+  }
+  .top { grid-area: top; display: flex; justify-content: flex-end; }
+  .icon-btn {
+    width: 44px; height: 44px; border-radius: 22px; border: 0;
+    background: var(--surface); color: var(--green); font-size: 22px; line-height: 1;
+  }
+
+  .face {
+    grid-area: face; min-height: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; text-align: center;
+  }
+  .status { font-size: 20px; font-weight: 600; color: var(--muted); }
+  .status.paused { color: var(--yellow); }
+  .clock {
+    font-size: min(25vw, 34vh);
+    font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    color: var(--dim);
+  }
+  .clock.running { color: var(--text); }
+  .clock.paused { color: var(--yellow); }
+  .clock.added { color: var(--orange); }
+  .added-box { color: var(--orange); }
+  .added-box .value { font-size: min(14vw, 12vh); font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .added-box .label { font-size: 17px; font-weight: 600; }
+  .bar { width: 100%; max-width: 520px; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--green); border-radius: 3px; }
+  .bar.added > div { background: var(--orange); }
+  .break { font-size: 24px; font-weight: 600; color: var(--cyan); font-variant-numeric: tabular-nums; }
+  .results { list-style: none; margin: 6px 0 0; padding: 0; color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; line-height: 1.5; }
+
+  .controls { grid-area: controls; display: flex; flex-direction: column; gap: 12px; }
+  .big {
+    width: 100%; min-height: 64px; border: 0; border-radius: 20px;
+    font-size: 22px; font-weight: 700; color: #fff;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .big:active { filter: brightness(.8); }
+  .big.green { background: var(--green); color: #000; }
+  .big.yellow { background: var(--yellow); color: #000; }
+  .big.red { background: var(--red); }
+  .big.blue { background: var(--blue); }
+  .big.gray { background: var(--gray); }
+
+  .flash { animation: flash .5s ease-in-out 6; }
+  @keyframes flash { 50% { background: var(--orange); } }
+
+  @media (orientation: landscape) and (max-height: 600px) {
+    .app {
+      grid-template-columns: 1fr minmax(240px, 34%);
+      grid-template-rows: auto 1fr;
+      grid-template-areas: "face top" "face controls";
+      padding-top: calc(env(safe-area-inset-top) + 12px);
+    }
+    .controls { justify-content: flex-end; }
+    .clock { font-size: min(16vw, 42vh); }
+    .added-box .value { font-size: 12vh; }
+    .status { font-size: 17px; }
+  }
+
+  /* Okna dialogowe */
+  dialog {
+    border: 0; padding: 0; margin: auto auto 0; width: 100%; max-width: 560px;
+    background: transparent; color: var(--text);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .6); }
+  .sheet {
+    margin: 0 8px calc(env(safe-area-inset-bottom) + 8px);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .group { background: var(--surface); border-radius: 14px; overflow: hidden; }
+  .group > * + * { border-top: 1px solid var(--sep); }
+  .group h3 { margin: 0; padding: 14px 16px 6px; font-size: 13px; font-weight: 600; color: var(--muted); text-align: center; border: 0; }
+  .group p { margin: 0; padding: 4px 16px 14px; font-size: 14px; color: var(--muted); text-align: center; }
+  .row-btn {
+    display: block; width: 100%; border: 0; background: transparent;
+    padding: 16px; font-size: 19px; color: var(--blue); text-align: center;
+  }
+  .row-btn:active { background: var(--surface-2); }
+  .row-btn.danger { color: var(--red); }
+  .row-btn.bold { font-weight: 600; }
+  .row-btn:disabled { color: var(--gray); }
+  .grid-btns { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .grid-btns .row-btn { border-left: 1px solid var(--sep); }
+  .grid-btns .row-btn:first-child { border-left: 0; }
+
+  .settings .field { padding: 14px 16px; }
+  .settings .field > span { display: block; font-size: 15px; color: var(--muted); margin-bottom: 10px; }
+  .seg { display: flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { flex: 1; border: 0; background: transparent; border-radius: 8px; padding: 9px 0; font-size: 16px; font-weight: 600; }
+  .seg button.on { background: var(--gray); }
+  .seg button:disabled { color: var(--gray); }
+  .seg button.on:disabled { color: var(--muted); }
+  .settings .note { padding: 0 16px 14px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="top"><button class="icon-btn" id="menuBtn" aria-label="Menu">•••</button></div>
+
+  <main class="face">
+    <div class="status" id="status"></div>
+    <div class="clock" id="clock">00:00</div>
+    <div class="added-box" id="addedBox" hidden>
+      <div class="value" id="added">+0:00</div>
+      <div class="label">czas doliczony</div>
+    </div>
+    <div class="bar" id="bar" hidden><div id="fill"></div></div>
+    <div class="break" id="break" hidden></div>
+    <ul class="results" id="results"></ul>
+  </main>
+
+  <section class="controls" id="controls"></section>
+</div>
+
+<dialog id="menu">
+  <div class="sheet">
+    <div class="group">
+      <h3>Korekta czasu</h3>
+      <div class="grid-btns">
+        <button class="row-btn" data-adjust="60000">+1 min</button>
+        <button class="row-btn" data-adjust="-60000">−1 min</button>
+        <button class="row-btn" data-adjust="10000">+10 s</button>
+        <button class="row-btn" data-adjust="-10000">−10 s</button>
+      </div>
+      <button class="row-btn" id="openSettings">Ustawienia</button>
+      <button class="row-btn danger" id="menuNewMatch">Nowy mecz</button>
+    </div>
+    <div class="group"><button class="row-btn bold" data-close>Anuluj</button></div>
+  </div>
+</dialog>
+
+<dialog id="confirm">
+  <div class="sheet">
+    <div class="group">
+      <h3 id="confirmTitle"></h3>
+      <p id="confirmText"></p>
+      <button class="row-btn danger" id="confirmOk"></button>
+    </div>
+    <div class="group"><button class="row-btn bold" data-close>Anuluj</button></div>
+  </div>
+</dialog>
+
+<dialog id="settings">
+  <div class="sheet settings">
+    <div class="group">
+      <h3>Ustawienia</h3>
+      <div class="field"><span>Długość połowy</span><div class="seg" id="halfSeg"></div></div>
+      <div class="note" id="halfNote"></div>
+      <div class="field"><span>Połowa dogrywki</span><div class="seg" id="extraSeg"></div></div>
+      <div class="note">Gdy minie regulaminowy czas połowy, zegar zagra sygnał i mignie. Zegar liczy dalej i pokazuje czas doliczony.</div>
+      <button class="row-btn" id="testSound">Sprawdź dźwięk</button>
+    </div>
+    <div class="group"><button class="row-btn bold" data-close>Gotowe</button></div>
+  </div>
+</dialog>
+
+<script src="clock.js"></script>
+<script>
+  const clock = new MatchClock();
+  const $ = id => document.getElementById(id);
+
+  // ---- Dźwięk (Web Audio; na iOS trzeba go odblokować dotknięciem) ----
+  let audio;
+  function unlockAudio() {
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = 'playback'; // gra mimo przełącznika wyciszenia
+      audio ??= new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state !== 'running') audio.resume();
+    } catch {}
+  }
+  function whistle() {
+    if (!audio) return;
+    const t = audio.currentTime;
+    [0, 0.45, 0.9].forEach((d, i) => {
+      const osc = audio.createOscillator(), gain = audio.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 2200;
+      gain.gain.setValueAtTime(0.0001, t + d);
+      gain.gain.exponentialRampToValueAtTime(0.25, t + d + 0.02);
+      gain.gain.setValueAtTime(0.25, t + d + (i === 2 ? 0.7 : 0.3));
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + d + (i === 2 ? 0.75 : 0.35));
+      osc.connect(gain).connect(audio.destination);
+      osc.start(t + d);
+      osc.stop(t + d + 0.8);
+    });
+    navigator.vibrate?.([300, 150, 300, 150, 600]);
+  }
+  document.addEventListener('pointerdown', unlockAudio, { capture: true });
+
+  // ---- Ekran nie gaśnie w trakcie połowy ----
+  let wakeLock = null;
+  async function syncWakeLock() {
+    const want = clock.isRunningOrPaused && document.visibilityState === 'visible';
+    try {
+      if (want && !wakeLock && 'wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!want && wakeLock) {
+        await wakeLock.release();
+        wakeLock = null;
+      }
+    } catch {}
+  }
+  document.addEventListener('visibilitychange', () => { syncWakeLock(); render(); });
+
+  // ---- Okna dialogowe ----
+  function openDialog(d) { d.showModal(); }
+  document.querySelectorAll('dialog').forEach(d => {
+    d.addEventListener('click', e => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
+  });
+
+  function confirmAction(title, text, okLabel, onOk) {
+    $('confirmTitle').textContent = title;
+    $('confirmText').textContent = text;
+    $('confirmText').hidden = !text;
+    $('confirmOk').textContent = okLabel;
+    $('confirmOk').onclick = () => { $('confirm').close(); onOk(); act(); };
+    openDialog($('confirm'));
+  }
+
+  function confirmNewMatch() {
+    confirmAction('Rozpocząć nowy mecz?', 'Bieżący czas zostanie wyzerowany.', 'Nowy mecz', () => clock.newMatch());
+  }
+
+  $('menuBtn').onclick = () => {
+    document.querySelectorAll('[data-adjust]').forEach(b => { b.disabled = !clock.isRunningOrPaused; });
+    openDialog($('menu'));
+  };
+  document.querySelectorAll('[data-adjust]').forEach(b => {
+    b.onclick = () => { clock.adjust(Number(b.dataset.adjust)); act(); };
+  });
+  $('openSettings').onclick = () => { $('menu').close(); renderSettings(); openDialog($('settings')); };
+  $('menuNewMatch').onclick = () => { $('menu').close(); confirmNewMatch(); };
+  $('testSound').onclick = () => { unlockAudio(); whistle(); };
+
+  function renderSeg(el, options, value, disabled, onPick) {
+    el.replaceChildren(...options.map(min => {
+      const b = document.createElement('button');
+      b.textContent = `${min}`;
+      b.className = min === value ? 'on' : '';
+      b.disabled = disabled;
+      b.onclick = () => { onPick(min); renderSettings(); act(); };
+      return b;
+    }));
+  }
+  function renderSettings() {
+    const s = clock.state;
+    renderSeg($('halfSeg'), HALF_LENGTH_OPTIONS, s.halfLength, clock.hasStarted, m => clock.setHalfLength(m));
+    renderSeg($('extraSeg'), EXTRA_TIME_OPTIONS, s.extraTimeLength, clock.isExtraTime(s.period), m => clock.setExtraTimeLength(m));
+    $('halfNote').textContent = clock.hasStarted
+      ? 'Długość połowy można zmienić przed meczem albo po „Nowy mecz”.'
+      : `Minuty. 2. połowa zaczyna się od ${s.halfLength}:00, regulaminowy czas kończy się na ${2 * s.halfLength}:00.`;
+  }
+
+  // ---- Przyciski główne ----
+  function button(label, icon, color, onClick) {
+    const b = document.createElement('button');
+    b.className = `big ${color}`;
+    b.innerHTML = `<span aria-hidden="true">${icon}</span>`;
+    b.append(label);
+    b.onclick = () => { onClick(); act(); };
+    return b;
+  }
+  const endPeriodButton = () => button('Koniec połowy', '⚑', 'red', () =>
+    confirmAction(`Zakończyć: ${clock.periodName}?`, '', 'Zakończ', () => clock.endPeriod()));
+
+  function renderControls() {
+    const c = $('controls');
+    switch (clock.phase) {
+      case 'ready':
+        c.replaceChildren(button(`Start: ${clock.periodName}`, '▶', 'green', () => clock.start()));
+        break;
+      case 'running':
+        c.replaceChildren(button('Pauza', '❚❚', 'yellow', () => clock.pause()), endPeriodButton());
+        break;
+      case 'paused':
+        c.replaceChildren(button('Wznów', '▶', 'green', () => clock.start()), endPeriodButton());
+        break;
+      case 'finished':
+        c.replaceChildren(...[
+          clock.canStartExtraTime && button('Dogrywka', '+', 'blue', () => clock.startExtraTime()),
+          button('Nowy mecz', '↺', 'gray', confirmNewMatch),
+        ].filter(Boolean));
+        break;
+    }
+  }
+
+  // ---- Tarcza zegara ----
+  function statusText(now) {
+    switch (clock.phase) {
+      case 'ready':
+        return clock.hasStarted ? `Następnie: ${clock.periodName}` : `Przed meczem · połowa ${clock.state.halfLength} min`;
+      case 'running':
+        return `${clock.periodName} · ${ClockFormat.matchMinute(clock.periodElapsed(now), clock.offset(), clock.length())}`;
+      case 'paused':
+        return `${clock.periodName} · PAUZA`;
+      case 'finished':
+        return 'Koniec meczu';
+    }
+  }
+
+  function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+
+  function render() {
+    const now = Date.now();
+    const phase = clock.phase;
+    const added = clock.addedTime(now);
+    const inAdded = added > 0 && phase !== 'finished';
+
+    setText($('status'), statusText(now));
+    $('status').className = `status ${phase === 'paused' ? 'paused' : ''}`;
+    setText($('clock'), ClockFormat.clock(clock.matchElapsed(now)));
+    $('clock').className = `clock ${phase === 'running' ? (inAdded ? 'added' : 'running') : phase === 'paused' ? 'paused' : ''}`;
+
+    $('addedBox').hidden = !inAdded;
+    if (inAdded) setText($('added'), ClockFormat.added(added));
+
+    $('bar').hidden = !clock.isRunningOrPaused;
+    $('bar').className = `bar ${inAdded ? 'added' : ''}`;
+    $('fill').style.width = `${clock.progress(now) * 100}%`;
+
+    const br = clock.breakElapsed(now);
+    $('break').hidden = br == null;
+    if (br != null) setText($('break'), `Przerwa ${ClockFormat.clock(br)}`);
+
+    const results = clock.state.results.map(r => {
+      const end = clock.offset(r.period) + r.duration;
+      const extra = Math.max(0, r.duration - clock.length(r.period));
+      return `${PERIODS[r.period]}: koniec ${ClockFormat.clock(end)}${extra >= 1000 ? ` (${ClockFormat.added(extra)})` : ''}`;
+    });
+    const ul = $('results');
+    if (ul.dataset.v !== results.join('|')) {
+      ul.dataset.v = results.join('|');
+      ul.replaceChildren(...results.map(t => Object.assign(document.createElement('li'), { textContent: t })));
+    }
+
+    // Sygnał na koniec regulaminowego czasu połowy
+    if (phase === 'running' && inAdded && !clock.state.alerted) {
+      clock.markAlerted();
+      if (added < 10000 && document.visibilityState === 'visible') {
+        whistle();
+        const app = $('app');
+        app.classList.remove('flash'); void app.offsetWidth; app.classList.add('flash');
+      }
+    }
+  }
+
+  function act() { renderControls(); render(); syncWakeLock(); }
+
+  act();
+  setInterval(render, 200);
+
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
